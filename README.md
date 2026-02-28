@@ -1,6 +1,7 @@
 
 # WClient - #1 Utility Client for MCPE
 
+
 ![MCPE](https://img.shields.io/badge/Minecraft-Bedrock-green?logo=minecraft&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-MCPE-orange)
 ![Kotlin](https://img.shields.io/badge/Code-Kotlin-7F52FF?logo=kotlin&logoColor=white)
@@ -11,7 +12,15 @@
 WClient does **not** modify game memory directly and is engineered for compatibility across multiple Bedrock environments.
 
 ---
+## Our Team
 
+Prajwal (Founder & Developer) 
+
+Flexy H6X (Helper)
+
+RA Legend (Supporter)
+
+---
 ## Acknowledgements
 
 Special thanks to the developers and open‑source projects that inspired this client, including **MuCuteClient**, **ProtoHax**, **Team-Nova** and **Project Lumina**. Their work formed the foundation for many architectural and conceptual improvements in WClient.
