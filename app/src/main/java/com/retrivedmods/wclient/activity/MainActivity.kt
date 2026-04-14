@@ -21,15 +21,11 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.lifecycle.lifecycleScope
-import com.retrivedmods.wclient.auth.VerificationManager
 import com.retrivedmods.wclient.game.ModuleManager
 import com.retrivedmods.wclient.navigation.Navigation
 import com.retrivedmods.wclient.ui.component.LoadingScreen
-import com.retrivedmods.wclient.ui.component.VerificationDialog
 import com.retrivedmods.wclient.ui.theme.WClientTheme
 import com.retrivedmods.wclient.util.SoundUtil
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -40,13 +36,13 @@ class MainActivity : ComponentActivity() {
         if (allGranted) {
             Toast.makeText(
                 this,
-                "Storage permissions granted - You can now export configs",
+                "Storage permissions granted",
                 Toast.LENGTH_SHORT
             ).show()
         } else {
             Toast.makeText(
                 this,
-                "Storage permissions are required to export configs to external storage",
+                "Storage permissions are required to export configs",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -55,105 +51,31 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("BatteryLife")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Initialize Core Utilities
         SoundUtil.load(applicationContext)
-
-
         ModuleManager.loadConfig()
 
+        // System UI Setup
         enableEdgeToEdge()
         setupImmersiveMode()
         checkBatteryOptimizations()
-
         requestStoragePermissions()
 
         setContent {
             WClientTheme {
                 var showLoading by remember { mutableStateOf(true) }
-                var showVerificationDialog by remember { mutableStateOf(false) }
-                var verifying by remember { mutableStateOf(false) }
-                var wclientId by remember { mutableStateOf("") }
 
                 if (showLoading) {
+                    // Show loading screen once, then transition to main app
                     LoadingScreen(
                         onDone = {
-                            lifecycleScope.launch {
-                                wclientId = VerificationManager.getWClientId(this@MainActivity)
-
-                                if (VerificationManager.isWhitelisted(this@MainActivity, wclientId)) {
-                                    showLoading = false
-                                    return@launch
-                                }
-
-                                if (VerificationManager.isVerified(this@MainActivity, wclientId)) {
-                                    showLoading = false
-                                    return@launch
-                                }
-
-                                showLoading = false
-                                showVerificationDialog = true
-                            }
-                        }
-                    )
-                } else if (showVerificationDialog) {
-                    VerificationDialog(
-                        wclientId = wclientId,
-                        onVerifyClick = {
-                            lifecycleScope.launch {
-                                verifying = true
-                                try {
-                                    val verifyUrl = VerificationManager.requestVerification(
-                                        this@MainActivity,
-                                        wclientId
-                                    )
-
-                                    VerificationManager.openInAppBrowser(
-                                        this@MainActivity,
-                                        verifyUrl
-                                    )
-
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Complete verification in the browser, then return to this app.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-
-                                    VerificationManager.pollVerificationStatus(
-                                        this@MainActivity,
-                                        wclientId
-                                    ) { verified, reason ->
-                                        verifying = false
-                                        if (verified) {
-                                            showVerificationDialog = false
-                                            Toast.makeText(
-                                                this@MainActivity,
-                                                "Welcome - You are now verified!",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            Toast.makeText(
-                                                this@MainActivity,
-                                                "Verification failed: ${reason ?: "unknown"}",
-                                                Toast.LENGTH_LONG
-                                            ).show()
-                                        }
-                                    }
-                                } catch (t: Throwable) {
-                                    verifying = false
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Verification request failed: ${t.message}",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
+                            showLoading = false
                         }
                     )
                 } else {
-                    if (verifying) {
-                        LoadingScreen(onDone = {})
-                    } else {
-                        Navigation()
-                    }
+                    // Main App Content
+                    Navigation()
                 }
             }
         }
@@ -161,40 +83,40 @@ class MainActivity : ComponentActivity() {
 
     private fun setupImmersiveMode() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
-
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
     @SuppressLint("BatteryLife")
     private fun checkBatteryOptimizations() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
-        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
-            startActivity(
-                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-                    data = "package:$packageName".toUri()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                            data = "package:$packageName".toUri()
+                        }
+                    )
+                } catch (e: Exception) {
+                    // Fallback if the intent is not supported on specific devices
                 }
-            )
+            }
         }
     }
 
     private fun requestStoragePermissions() {
-        if (hasStoragePermissions()) {
-            return
+        if (!hasStoragePermissions()) {
+            storagePermissionLauncher.launch(getRequiredStoragePermissions())
         }
-
-        val permissions = getRequiredStoragePermissions()
-        storagePermissionLauncher.launch(permissions)
     }
 
     private fun hasStoragePermissions(): Boolean {
-        val permissions = getRequiredStoragePermissions()
-        return permissions.all { permission ->
+        return getRequiredStoragePermissions().all { permission ->
             ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
     }
@@ -222,8 +144,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        VerificationManager.cancelAll()
-
+        // Save user settings/configs before closing
         ModuleManager.saveConfig()
     }
 }
